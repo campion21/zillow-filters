@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Zillow Power Filters",
+  "version": "0.1.0",
+  "description": "Filter Zillow by what Zillow won't: gas range, structural masonry, in-unit laundry, central A/C & build-quality red flags.",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Zillow Power Filters"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zillow.com/homes/*",
+        "https://www.zillow.com/*/for-sale/*",
+        "https://www.zillow.com/*/for_rent/*",
+        "https://www.zillow.com/*/rentals/*",
+        "https://www.zillow.com/*/apartments/*",
+        "https://www.zillow.com/*_rb*",
+        "https://www.zillow.com/for-sale/*",
+        "https://www.zillow.com/for_rent/*",
+        "https://www.zillow.com/(search)?*"
+      ],
+      "js": [
+        "content-search.js"
+      ],
+      "css": [
+        "shared.css"
+      ],
+      "run_at": "document_idle",
+      "type": "module"
+    },
+    {
+      "matches": [
+        "https://www.zillow.com/homedetails/*"
+      ],
+      "js": [
+        "content-detail.js"
+      ],
+      "css": [
+        "shared.css"
+      ],
+      "run_at": "document_idle",
+      "type": "module"
+    }
+  ]
+}

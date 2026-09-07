@@ -1,0 +1,12 @@
+{
+  "name": "zillow-filters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Power filters for Zillow: gas range, structural masonry, build-quality signals. Chrome MV3 extension.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "node scripts/build.js"
+  },
+  "license": "MIT"
+}

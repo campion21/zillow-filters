@@ -1,0 +1,37 @@
+/* Zillow Power Filters — badges & banners. All scoped under .zpf-* */
+
+.zpf-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  font: 600 11px/1 -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 3px 6px; border-radius: 999px; margin: 2px 3px 2px 0;
+  border: 1px solid transparent; cursor: default; white-space: nowrap;
+}
+.zpf-chip.zpf-yes  { background: #e7f6ec; color: #14703c; border-color: #bfdfd0; }
+.zpf-chip.zpf-no   { background: #fdecec; color: #b3261e; border-color: #f3c2bf; }
+.zpf-chip.zpf-unknown { background: #f1f1f1; color: #555; border-color: #e0e0e0; }
+.zpf-chip.zpf-concern { background: #fff4e0; color: #945500; border-color: #f0d9a8; }
+.zpf-chip.zpf-loading { background: #eef4ff; color: #3560b8; border-color: #cfddfa; }
+
+.zpf-badge-row {
+  display: flex; flex-wrap: wrap; margin: 4px 2px 2px;
+}
+
+/* overall verdict ribbon on the card */
+.zpf-verdict {
+  font: 700 10px/1 -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.4px; text-transform: uppercase;
+  background: #0c84ff; color: #fff; border-radius: 4px;
+  padding: 4px 8px; display: inline-block; margin: 4px 2px 0;
+}
+.zpf-verdict.zpf-fail { background: #b3261e; }
+
+.zpf-hidden-card { display: none !important; }
+
+/* detail-page banner */
+.zpf-banner {
+  font: 13px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f7faff; border: 1px solid #cfddfa; border-radius: 10px;
+  padding: 10px 14px; margin: 10px 0;
+}
+.zpf-banner h4 { margin: 0 0 6px; font-size: 13px; }
+.zpf-banner .zpf-row { display: flex; flex-wrap: wrap; }
