@@ -1,5 +1,7 @@
 # Zillow Power Filters
 
+**→ [INSTALL.md](INSTALL.md) — get it in your browser in ~2 minutes (no tools needed).**
+
 Chrome extension (MV3) that adds the filters Zillow won't: **gas range**, structural masonry, in-unit laundry, central A/C, hardwood floors, dishwasher, attached garage, radiator/radiant heat, new construction — plus a red-flag layer for failing materials (polybutylene, Kitec, galvanized plumbing, FPE panels, aluminum wiring, cast-iron stacks).
 
 ## How it works
