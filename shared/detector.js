@@ -29,7 +29,10 @@ const ELECTRIC_DEFINITE =
   /(electric\s+(range|stove|cooktop|oven)|induction\s+(range|cooktop)|all[\s-]electric\s+kitchen)/i;
 
 // Masonry: structural brick/stone/block. "veneer" alone is cosmetic → concern-ish no.
-const MASONRY_STRUCTURAL = /\b(brick|stone|masonry|concrete\s*block|stucco over block)\b/i;
+// brownstone/fieldstone/limestone/bluestone/townhouse-block body words that end
+// in "stone" fail the naive \b-stone-\b boundary; match them explicitly and
+// bound to the right only ("brownstone" → structural; avoid "Stone Veneer").
+const MASONRY_STRUCTURAL = /\b(brick|brownstone|fieldstone|limestone|bluestone|sandstone|stone|masonry|concrete\s*block|cinder\s*block|stucco over block)\b/i;
 const MASONRY_VENEER_ONLY = /\b(brick|stone)\s+(veneer|front|accent)\b/i;
 const MASONRY_FRAME_NEGATIVE = /^\s*(wood\s*frame|vinyl|metal|aluminum|hardiplank|fiber\s*cement)\s*$/i;
 
