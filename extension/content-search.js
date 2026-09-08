@@ -9,6 +9,14 @@
   if (window.__zpfRunning) return;
   window.__zpfRunning = true;
 
+  if (!window.ZPF || !window.ZPF.FILTERS) {
+    const box = document.createElement('div');
+    box.id = 'zpf-status';
+    box.textContent = 'ZPF ERROR: detector-global.js did not load — window.ZPF missing';
+    document.body?.append(box) || document.documentElement.append(box);
+    console.error('[ZPF] window.ZPF missing — check that detector-global.js loads before content-search.js', window.ZPF);
+    return;
+  }
   const { FILTERS, evaluateAll, detectConcerns, fromZillowProperty } = window.ZPF;
   const FILTER_MAP = Object.fromEntries(FILTERS.map((f) => [f.id, f]));
 
@@ -18,7 +26,11 @@
     if (!box) {
       box = document.createElement('div');
       box.id = 'zpf-status';
-      document.body.append(box);
+      box.style.cssText = `position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+        background:#fff;border:2px solid #3560b8;border-radius:999px;padding:6px 14px;
+        font:600 12px -apple-system,sans-serif;color:#333;z-index:999999;
+        box-shadow:0 2px 12px rgba(0,0,0,.25);pointer-events:none;`;
+      (document.body || document.documentElement).append(box);
     }
     box.textContent = 'ZPF: ' + msg;
     box.style.borderColor = color;
