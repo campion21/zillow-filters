@@ -22,8 +22,18 @@ const URL = process.argv[2] || 'https://www.zillow.com/new-haven-ct/rentals/';
       '--disable-blink-features=AutomationControlled',
     ],
     userAgent:
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.127 Safari/537.36',
     viewport: { width: 1440, height: 900 },
+    locale: 'en-US',
+    timezoneId: 'America/New_York',
+    extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+  });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    window.chrome = window.chrome || { runtime: {} };
   });
 
   const page = await context.newPage();
