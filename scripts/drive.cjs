@@ -4,17 +4,31 @@
  * report exactly what the extension did (or failed to do).
  *
  * Usage: node scripts/drive.js [url]
- * Env: HEADFUL=1 for visible browser, ACCESS=1 to skip stealth
+ * Env: HEADFUL=1     visible Chromium instead of headless shell
+ *      REALCHROME=1  use installed Chrome with your real profile (best bot-score)
+ * Env override: PROFILE_DIR=<path> for custom Chrome profile
  */
-const { chromium } = require('playwright');
+const os = require('os');
 const path = require('path');
+const { chromium } = require('playwright');
 
 const EXT_PATH = path.join(__dirname, '..', 'extension');
 const URL = process.argv[2] || 'https://www.zillow.com/new-haven-ct/rentals/';
 
+const CHROME_EXECS = {
+  darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  linux: 'google-chrome',
+  win32: process.env.PROGRAMFILES && `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
+};
+const PROFILE_DEFAULTS = {
+  darwin: `${os.homedir()}/Library/Application Support/Google/Chrome`,
+  linux: `${os.homedir()}/.config/google-chrome`,
+};
+
 (async () => {
-  const headless = !process.env.HEADFUL;
-  const context = await chromium.launchPersistentContext('', {
+  const useReal = !!process.env.REALCHROME;
+  const headless = useReal ? false : !process.env.HEADFUL;
+  const opts = {
     headless,
     args: [
       `--disable-extensions-except=${EXT_PATH}`,
@@ -27,14 +41,23 @@ const URL = process.argv[2] || 'https://www.zillow.com/new-haven-ct/rentals/';
     locale: 'en-US',
     timezoneId: 'America/New_York',
     extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
-  });
+  };
+  let profileDir = '';
+  if (useReal) {
+    opts.channel = 'chrome'; // use installed Chrome, not headless shell
+    profileDir = process.env.PROFILE_DIR || PROFILE_DEFAULTS[process.platform] || '';
+    if (!profileDir) console.warn('[drive] REALCHROME on unknown platform; using temp profile');
+  }
+  const context = await chromium.launchPersistentContext(profileDir, opts);
 
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-    window.chrome = window.chrome || { runtime: {} };
-  });
+  if (!useReal) {
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+      Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+      window.chrome = window.chrome || { runtime: {} };
+    });
+  }
 
   const page = await context.newPage();
   page.on('console', (m) => {
