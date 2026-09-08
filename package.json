@@ -6,7 +6,24 @@
   "description": "Power filters for Zillow: gas range, structural masonry, build-quality signals. Chrome MV3 extension.",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "drive": "node scripts/drive.cjs",
     "build": "node scripts/build.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/campion21/zillow-filters.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/campion21/zillow-filters/issues"
+  },
+  "homepage": "https://github.com/campion21/zillow-filters#readme",
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
 }
