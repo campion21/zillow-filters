@@ -78,7 +78,10 @@ export function cardInfo(card) {
   return zpid ? { zpid, detailUrl } : null;
 }
 
-/** Best-effort JSON-structure scan: Zillow keeps render data on DOM nodes'
- *  React fibers — unreachable unless a card is clicked, so we skip fiber
- *  walking entirely and rely on __NEXT_DATA__ + fetch. */
-export function cardInlineListing() { return null; }
+/** Place to insert the badge row inside a card: right after the photo area
+ *  when detectable, else at card top. Photo containers in Zillow's cards are
+ *  the first non-anchor <div> child. */
+export function badgeAnchor(card) {
+  const firstDiv = card.querySelector(':scope > div');
+  return firstDiv || null;
+}

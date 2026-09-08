@@ -6,7 +6,7 @@
  * Unknown is never treated as fail; only explicit 'no' hides (in hide mode).
  */
 import { FILTER_MAP, evaluateAll, detectConcerns, fromZillowProperty } from '../shared/detector.js';
-import { parseNextData, findProperty, cardInfo } from './zillow-extract.js';
+import { parseNextData, findProperty, cardInfo, badgeAnchor } from './zillow-extract.js';
 
 const processed = new WeakSet();
 let settings = null;
@@ -48,8 +48,10 @@ function ensureRow(card) {
   if (!row) {
     row = document.createElement('div');
     row.className = 'zpf-badge-row';
-    // Insert near card top but inside the card element itself.
-    card.prepend(row);
+    const anchor = badgeAnchor(card);
+    if (anchor?.nextSibling) anchor.parentNode.insertBefore(row, anchor.nextSibling);
+    else if (anchor) anchor.parentNode.append(row);
+    else card.prepend(row);
   }
   return row;
 }
@@ -70,10 +72,24 @@ function concernChip(c) {
   return el;
 }
 
+let firstPaintDone = false;
+
 async function processCard(card) {
   if (processed.has(card) || !settings) return;
   processed.add(card);
   const info = cardInfo(card);
+
+  // One-time "script is alive" chip on the first card even before data resolves.
+  if (!firstPaintDone) {
+    firstPaintDone = true;
+    const row = ensureRow(card);
+    const alive = document.createElement('span');
+    alive.className = 'zpf-chip zpf-loading';
+    alive.textContent = '⏳ ZPF';
+    alive.title = 'Zillow Power Filters: script running, fetching details…';
+    row.append(alive);
+  }
+
   if (!info?.detailUrl) return;
 
   ensureRow(card); // reserve layout immediately
@@ -96,6 +112,7 @@ async function processCard(card) {
 function paint(card, { verdicts, concerns }) {
   const row = ensureRow(card);
   row.replaceChildren();
+  results.set(card, { verdicts, concerns });
   for (const id of settings.enabledFilters) {
     const f = FILTER_MAP[id]; const v = verdicts[id];
     if (f && v) row.append(chip(f, v));
@@ -111,15 +128,13 @@ const results = new Map(); // card → res
 function reapplyAll() {
   for (const [card, res] of results) if (card.isConnected) paint(card, res);
 }
-const origPaint = paint;
-paint = (card, res) => { results.set(card, res); origPaint(card, res); };
 
 /* ---------------- scan & observe ---------------- */
 
 function scan() {
   if (!settings) return;
   document.querySelectorAll(
-    '[data-zpid], [data-test="property-card"], li[class*="ListItem"], article[data-zpid]'
+    'article[data-test="property-card"], article[data-testid="property-card"], li[class^="ListItem"] article'
   ).forEach(processCard);
 }
 
