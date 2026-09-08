@@ -87,7 +87,11 @@ async function throttledText(url) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
-      case 'get-settings': return sendResponse(await getSettings());
+      case 'get-settings': {
+        const s = await getSettings();
+        s.filterMeta = FILTERS.map((f) => ({ id: f.id, label: f.label, icon: f.icon }));
+        return sendResponse(s);
+      }
       case 'set-settings': {
         await setSettings(msg.patch);
         const tabs = await chrome.tabs.query({ url: '*://www.zillow.com/*' });

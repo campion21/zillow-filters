@@ -1,145 +1,220 @@
 /**
- * Search-page enrichment: badge each result card with enabled-filter verdicts.
- * Data sources in priority order:
- *   1. background cache (free)
- *   2. throttled fetch of the card's detail URL → parse its __NEXT_DATA__
- * Unknown is never treated as fail; only explicit 'no' hides (in hide mode).
+ * Zillow Power Filters — search-page enrichment.
+ * Plain script (no imports): everything needed is inlined below or provided
+ * by detector-global.js, which loads first and sets window.ZPF.
+ * Unknowns are never treated as failures; only 'no' hides (in hide mode).
  */
-import { FILTER_MAP, evaluateAll, detectConcerns, fromZillowProperty } from '../shared/detector.js';
-import { parseNextData, findProperty, cardInfo, badgeAnchor } from './zillow-extract.js';
+(function () {
+  'use strict';
+  if (window.__zpfRunning) return;
+  window.__zpfRunning = true;
 
-const processed = new WeakSet();
-let settings = null;
+  const { FILTERS, evaluateAll, detectConcerns, fromZillowProperty } = window.ZPF;
+  const FILTER_MAP = Object.fromEntries(FILTERS.map((f) => [f.id, f]));
 
-/* ---------------- settings ---------------- */
-
-async function refreshSettings() {
-  settings = await chrome.runtime.sendMessage({ type: 'get-settings' });
-  reapplyAll();
-}
-chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'zpf-settings') refreshSettings(); });
-
-/* ---------------- verdict resolution ---------------- */
-
-async function resolveListing(info) {
-  const props = await chrome.runtime.sendMessage({ type: 'fetch-listing', zpid: info.zpid, url: info.detailUrl });
-  if (!props?.ok) return { error: props?.error || 'unknown' };
-  const data = parseNextData(props.html);
-  const prop = data ? findProperty(data) : null;
-  return { listing: fromZillowProperty(prop) };
-}
-
-function evaluateForCard(listing) {
-  const verdicts = evaluateAll(listing, settings.enabledFilters);
-  const concerns = settings.showConcerns ? detectConcerns(listing) : [];
-  return { verdicts, concerns };
-}
-
-function cardState({ verdicts }) {
-  const fails = settings.enabledFilters.filter((id) => verdicts[id]?.status === 'no');
-  const loading = false;
-  return fails.length ? 'fail' : loading ? 'loading' : 'pass';
-}
-
-/* ---------------- DOM ---------------- */
-
-function ensureRow(card) {
-  let row = card.querySelector(':scope > .zpf-badge-row');
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'zpf-badge-row';
-    const anchor = badgeAnchor(card);
-    if (anchor?.nextSibling) anchor.parentNode.insertBefore(row, anchor.nextSibling);
-    else if (anchor) anchor.parentNode.append(row);
-    else card.prepend(row);
-  }
-  return row;
-}
-
-function chip(filter, v) {
-  const el = document.createElement('span');
-  el.className = `zpf-chip zpf-${v.status === 'unknown' ? 'unknown' : v.status}`;
-  const mk = v.status === 'yes' ? '✓' : v.status === 'no' ? '✗' : '?';
-  el.textContent = `${filter.icon} ${mk}`;
-  el.title = `${filter.label}: ${v.status}` + (v.matched?.length ? ` — ${v.matched.join(', ')}` : '');
-  return el;
-}
-function concernChip(c) {
-  const el = document.createElement('span');
-  el.className = 'zpf-chip zpf-concern';
-  el.textContent = `⚠ ${c.label}`;
-  el.title = `Red flag (from listing text): “${c.matched}”`;
-  return el;
-}
-
-let firstPaintDone = false;
-
-async function processCard(card) {
-  if (processed.has(card) || !settings) return;
-  processed.add(card);
-  const info = cardInfo(card);
-
-  // One-time "script is alive" chip on the first card even before data resolves.
-  if (!firstPaintDone) {
-    firstPaintDone = true;
-    const row = ensureRow(card);
-    const alive = document.createElement('span');
-    alive.className = 'zpf-chip zpf-loading';
-    alive.textContent = '⏳ ZPF';
-    alive.title = 'Zillow Power Filters: script running, fetching details…';
-    row.append(alive);
+  /* ---------------------------------------------------------- diagnostics */
+  function statusBox(msg, color) {
+    let box = document.getElementById('zpf-status');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'zpf-status';
+      document.body.append(box);
+    }
+    box.textContent = 'ZPF: ' + msg;
+    box.style.borderColor = color;
+    console.log('[ZPF]', msg);
   }
 
-  if (!info?.detailUrl) return;
+  /* ------------------------------------------------------- JSON adapters */
+  function parseNextData(source) {
+    let text = null;
+    if (typeof source === 'string') {
+      const m = source.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+      if (m) text = m[1];
+    } else {
+      text = source.querySelector?.('script#__NEXT_DATA__')?.textContent ?? null;
+    }
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  }
 
-  ensureRow(card); // reserve layout immediately
+  function looksLikeProperty(x) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
+    return !!(x.resoFacts && (x.zpid || x.streetAddress || x.address || x.description));
+  }
 
-  const { listing, error } = await resolveListing(info);
-  if (error || !listing) {
-    const row = ensureRow(card);
+  function findProperty(obj, depth = 0) {
+    if (!obj || depth > 14) return null;
+    const gdp = obj?.props?.pageProps?.componentProps?.gdpClientCache;
+    if (typeof gdp === 'string') {
+      try {
+        const cache = JSON.parse(gdp);
+        for (const k of Object.keys(cache)) {
+          const p = cache[k]?.property ?? cache[k]?.data?.property;
+          if (p && looksLikeProperty(p)) return p;
+        }
+        for (const k of Object.keys(cache)) {
+          const hit = findProperty(cache[k], depth + 1);
+          if (hit) return hit;
+        }
+      } catch { /* fall through to generic walk */ }
+    }
+    if (looksLikeProperty(obj)) return obj;
+    if (typeof obj !== 'object') return null;
+    for (const v of Object.values(obj)) {
+      if (v && typeof v === 'object') {
+        const hit = findProperty(v, depth + 1);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------- card adapters */
+  function cardInfo(card) {
+    let zpid = card.dataset?.zpid || card.getAttribute?.('data-zpid') || null;
+    const a = card.querySelector?.('a[href*="/homedetails/"]');
+    let detailUrl = null;
+    if (a) {
+      detailUrl = a.getAttribute('href');
+      if (detailUrl?.startsWith('/')) detailUrl = location.origin + detailUrl;
+    }
+    if (!zpid && detailUrl) {
+      const m = detailUrl.match(/\/(\d+)_zpid\//);
+      if (m) zpid = m[1];
+    }
+    return zpid ? { zpid, detailUrl } : (detailUrl ? { zpid: null, detailUrl } : null);
+  }
+
+  /* -------------------------------------------------------------- state */
+  const processed = new WeakSet();
+  const results = new Map();
+  let settings = null;
+
+  async function refreshSettings() {
+    try {
+      settings = await chrome.runtime.sendMessage({ type: 'get-settings' });
+    } catch (e) {
+      // storage unreachable → run with hardcoded defaults so the user still gets feedback
+      settings = { enabledFilters: ['gasRange'], mode: 'tag', showConcerns: true };
+      statusBox('settings unavailable, using defaults — ' + e.message, 'orange');
+    }
+    reapplyAll();
+  }
+  chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'zpf-settings') refreshSettings(); });
+
+  /* ------------------------------------------------------------- DOM out */
+  function ensureRow(card) {
+    let row = card.querySelector(':scope > .zpf-badge-row');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'zpf-badge-row';
+      card.prepend(row);
+    }
+    return row;
+  }
+
+  function chip(filter, v) {
     const el = document.createElement('span');
-    el.className = 'zpf-chip zpf-loading';
-    el.textContent = '⏳';
-    el.title = error || 'no data';
-    row.append(el);
-    return;
+    el.className = `zpf-chip zpf-${v.status === 'unknown' ? 'unknown' : v.status}`;
+    const mk = v.status === 'yes' ? '✓' : v.status === 'no' ? '✗' : '?';
+    el.textContent = `${filter.icon} ${mk}`;
+    el.title = `${filter.label}: ${v.status}` + (v.matched?.length ? ` — ${v.matched.join(', ')}` : '');
+    return el;
+  }
+  function concernChip(c) {
+    const el = document.createElement('span');
+    el.className = 'zpf-chip zpf-concern';
+    el.textContent = `⚠ ${c.label}`;
+    el.title = `Red flag (from listing text): “${c.matched}”`;
+    return el;
   }
 
-  const res = evaluateForCard(listing);
-  paint(card, res);
-}
-
-function paint(card, { verdicts, concerns }) {
-  const row = ensureRow(card);
-  row.replaceChildren();
-  results.set(card, { verdicts, concerns });
-  for (const id of settings.enabledFilters) {
-    const f = FILTER_MAP[id]; const v = verdicts[id];
-    if (f && v) row.append(chip(f, v));
+  function paint(card, res) {
+    const row = ensureRow(card);
+    row.replaceChildren();
+    results.set(card, res);
+    for (const id of settings.enabledFilters) {
+      const f = FILTER_MAP[id]; const v = res.verdicts[id];
+      if (f && v) row.append(chip(f, v));
+    }
+    for (const c of res.concerns) row.append(concernChip(c));
+    const failed = settings.enabledFilters.some((id) => res.verdicts[id]?.status === 'no');
+    card.classList.toggle('zpf-hidden-card', failed && settings.mode === 'hide');
   }
-  for (const c of concerns) row.append(concernChip(c));
 
-  const failed = cardState({ verdicts }) === 'fail';
-  card.classList.toggle('zpf-hidden-card', failed && settings.mode === 'hide');
-}
+  function reapplyAll() {
+    for (const [card, res] of results) if (card.isConnected) paint(card, res);
+  }
 
-/** Re-apply hide/show without re-fetching (settings toggles). */
-const results = new Map(); // card → res
-function reapplyAll() {
-  for (const [card, res] of results) if (card.isConnected) paint(card, res);
-}
+  /* -------------------------------------------------------- data fetch */
+  async function resolveListing(info) {
+    if (!info.detailUrl) return { error: 'no detail URL' };
+    let resp;
+    try {
+      resp = await chrome.runtime.sendMessage({ type: 'fetch-listing', zpid: info.zpid, url: info.detailUrl });
+    } catch (e) {
+      return { error: 'messaging: ' + e.message };
+    }
+    if (!resp?.ok) return { error: resp?.error || 'unknown' };
+    const data = parseNextData(resp.html);
+    if (!data) return { error: 'no __NEXT_DATA__ in detail page' };
+    const prop = findProperty(data);
+    if (!prop) return { error: 'property record not found in JSON' };
+    return { listing: fromZillowProperty(prop) };
+  }
 
-/* ---------------- scan & observe ---------------- */
+  async function processCard(card) {
+    if (processed.has(card) || !settings) return;
+    processed.add(card);
+    const info = cardInfo(card);
+    const row = ensureRow(card);
+    const pend = document.createElement('span');
+    pend.className = 'zpf-chip zpf-loading';
+    pend.textContent = '⏳ ZPF';
+    pend.title = 'Zillow Power Filters: fetching listing details…';
+    row.append(pend);
 
-function scan() {
-  if (!settings) return;
-  document.querySelectorAll(
-    'article[data-test="property-card"], article[data-testid="property-card"], li[class^="ListItem"] article'
-  ).forEach(processCard);
-}
+    const { listing, error } = await resolveListing(info || {});
+    if (error || !listing) {
+      pend.textContent = '⏳?';
+      pend.title = 'ZPF could not read this listing: ' + (error || 'no data');
+      return;
+    }
+    const verdicts = evaluateAll(listing, settings.enabledFilters);
+    const concerns = settings.showConcerns ? detectConcerns(listing) : [];
+    paint(card, { verdicts, concerns });
+  }
 
-const mo = new MutationObserver(() => scan());
-refreshSettings().then(() => {
-  scan();
-  mo.observe(document.body, { childList: true, subtree: true });
-});
+  /* -------------------------------------------------------- scanning */
+  const CARD_SEL = [
+    'article[data-test="property-card"]',
+    'article[data-testid="property-card"]',
+    '[data-test="property-card"]',
+    '[data-testid="property-card"]',
+    'li[class^="ListItem"] article',
+  ].join(', ');
+
+  let scanTimer = null;
+  function scan() {
+    const cards = document.querySelectorAll(CARD_SEL);
+    statusBox(`scan — ${cards.length} card element(s) found`, cards.length ? '#14703c' : '#b3261e');
+    cards.forEach(processCard);
+  }
+  function scheduleScan() {
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(scan, 300); // debounce
+  }
+
+  /* ---------------------------------------------------------------- boot */
+  function boot() {
+    if (!document.body) { setTimeout(boot, 200); return; }
+    statusBox('script loaded, booting…', '#3560b8');
+    refreshSettings().then(() => {
+      scan();
+      const mo = new MutationObserver(scheduleScan);
+      mo.observe(document.body, { childList: true, subtree: true });
+    });
+  }
+  boot();
+})();
