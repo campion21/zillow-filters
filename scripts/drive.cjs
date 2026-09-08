@@ -45,7 +45,8 @@ const PROFILE_DEFAULTS = {
   let profileDir = '';
   if (useReal) {
     opts.channel = 'chrome'; // use installed Chrome, not headless shell
-    profileDir = process.env.PROFILE_DIR || PROFILE_DEFAULTS[process.platform] || '';
+    const root = process.env.PROFILE_DIR || PROFILE_DEFAULTS[process.platform] || '';
+    profileDir = root ? path.join(root, 'Default') : ''; // real profile lives in user-data-dir/Default
     if (!profileDir) console.warn('[drive] REALCHROME on unknown platform; using temp profile');
   }
   const context = await chromium.launchPersistentContext(profileDir, opts);
@@ -59,7 +60,9 @@ const PROFILE_DEFAULTS = {
     });
   }
 
-  const page = await context.newPage();
+  // Persistent context may already have pages (esp. real-profile launches);
+  // attach to the last open one, else create.
+  const page = context.pages().pop() || (await context.newPage());
   page.on('console', (m) => {
     const t = m.text();
     if (t.includes('[ZPF]') || m.type() === 'error') console.log(`[page:${m.type()}] ${t}`);
